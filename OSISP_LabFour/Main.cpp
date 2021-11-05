@@ -43,33 +43,38 @@ auto GetPaginatedTasks() {
 void MergeAltogether(vector<Task<SortRange>*>&);
 
 void SortRoutine() {
-	Threadpool<SortRange>::Instance().Initialize(user_threads);
-	Threadpool<SortRange>::Instance().BeginProcessing();
 	{
-		LOG_DURATION("SortRoutine");
-		words = FileReader::Instance().GetFileStrings();
-		tasks = GetPaginatedTasks();
-		for (auto& task : tasks) {
-			Threadpool<SortRange>::Instance().AddTask(task);
+		LOG_DURATION("Thread sort");
+		Threadpool<SortRange>::Instance().Initialize(user_threads);
+		Threadpool<SortRange>::Instance().BeginProcessing();
+		{
+			words = FileReader::Instance().GetFileStrings();
+			tasks = GetPaginatedTasks();
+			for (auto& task : tasks) {
+				Threadpool<SortRange>::Instance().AddTask(task);
+			}
+			Threadpool<SortRange>::Instance().WaitProcessing();
+			completedTasks = Threadpool<SortRange>::Instance().GetCompletedTasks();
 		}
-		Threadpool<SortRange>::Instance().WaitProcessing();
-		completedTasks = Threadpool<SortRange>::Instance().GetCompletedTasks();
+		Threadpool<SortRange>::Instance().Shutdown();
 	}
-	Threadpool<SortRange>::Instance().Shutdown();
 	MergeAltogether(completedTasks);
 }
 
 void MergeAltogether(vector<Task<SortRange>*>& completedTasks) {
-	sort(completedTasks.begin(), completedTasks.end(), [](Task<SortRange>* lhs, Task<SortRange>* rhs){
+	sort(completedTasks.begin(), completedTasks.end(), [](Task<SortRange>* lhs, Task<SortRange>* rhs) {
 		return lhs->GetResult()->result.begin() <
-			   rhs->GetResult()->result.begin();
-	});
+			rhs->GetResult()->result.begin();
+		});
 
 	auto vec_begin = completedTasks[0]->GetResult()->result.begin();
 
-	for (size_t i = 1; i < completedTasks.size(); i++) {
-		auto taskRes = completedTasks[i]->GetResult()->result;
-		inplace_merge(vec_begin, taskRes.begin(), taskRes.end());
+	{
+		LOG_DURATION("InPlace merge");
+		for (size_t i = 1; i < completedTasks.size(); i++) {
+			auto taskRes = completedTasks[i]->GetResult()->result;
+			inplace_merge(vec_begin, taskRes.begin(), taskRes.end());
+		}
 	}
 }
 
@@ -100,17 +105,18 @@ void PrintMenu() {
 	cout << "5. Exit" << endl;
 }
 
-int main() {
-	setlocale(LC_ALL, "RUS");
-
+void RequestUserThreadCount() {
 	cout << "Please, enter the number of threads you would like to use (max " << MAX_THREADS << " is allowed):" << endl;
 	cin >> user_threads;
 
 	if (user_threads > MAX_THREADS || user_threads == 0) {
 		cout << "Sorry, cannot do that. Bye!" << endl;
-		return -1;
+		exit(-1);
 	}
+}
 
+int main() {
+	setlocale(LC_ALL, "RUS");
 	PrintMenu();
 
 	while (true) {
@@ -136,6 +142,8 @@ int main() {
 		}
 
 		case 3: {
+			RequestUserThreadCount();
+			LOG_DURATION("Sort and print on screen");
 			SortRoutine();
 			cout << "Result:" << endl;
 			for (string& s : words) {
@@ -145,6 +153,8 @@ int main() {
 		}
 
 		case 4: {
+			RequestUserThreadCount();
+			LOG_DURATION("Sort and print to file");
 			SortRoutine();
 			ofstream out(resPath);
 			out << "Result:" << endl;
