@@ -11,7 +11,6 @@ using namespace Threading;
 
 const size_t MAX_THREADS = thread::hardware_concurrency();
 size_t user_threads = 0;
-OPENFILENAME ofn;
 
 char path[256] = "\0";
 
@@ -21,20 +20,6 @@ vector<string> words;
 vector<Task<SortRange>*> tasks;
 vector<Task<SortRange>*> completedTasks;
 
-void InitializeOfnStructure() {
-	ZeroMemory(&ofn, sizeof(ofn));
-	ofn.lStructSize = sizeof(ofn);
-	ofn.hwndOwner = NULL;
-	ofn.lpstrFile = path;
-	ofn.lpstrFile[0] = '\0';
-	ofn.nMaxFile = sizeof(path);
-	ofn.lpstrFilter = "Текстовые файлы\0*.txt\0";
-	ofn.nFilterIndex = 0;
-	ofn.lpstrFileTitle = NULL;
-	ofn.nMaxFileTitle = 0;
-	ofn.lpstrInitialDir = NULL;
-	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
-}
 
 SortRange SortThreadProc(TaskData* data) {
 	SortStructData* downcast = dynamic_cast<SortStructData*>(data);
@@ -58,6 +43,8 @@ auto GetPaginatedTasks() {
 void MergeAltogether(vector<Task<SortRange>*>&);
 
 void SortRoutine() {
+	Threadpool<SortRange>::Instance().Initialize(user_threads);
+	Threadpool<SortRange>::Instance().BeginProcessing();
 	{
 		LOG_DURATION("SortRoutine");
 		words = FileReader::Instance().GetFileStrings();
@@ -68,6 +55,7 @@ void SortRoutine() {
 		Threadpool<SortRange>::Instance().WaitProcessing();
 		completedTasks = Threadpool<SortRange>::Instance().GetCompletedTasks();
 	}
+	Threadpool<SortRange>::Instance().Shutdown();
 	MergeAltogether(completedTasks);
 }
 
@@ -95,19 +83,11 @@ void PrintChosenFilePath() {
 }
 
 void ChooseAndReadFile() {
-	if (GetOpenFileName(&ofn) == TRUE) {
-		FileReader::Instance().SetFilePath(path);
-		try {
-			FileReader::Instance().DoReadFile();
-			cout << "File has been successfuly chosen and read!" << endl;
-		}
-		catch (...) {
-			cerr << "Error occurred when reading file!" << endl;
-		}
-	}
-	else {
-		cerr << "File was not chosen!" << endl;
-	}
+	cout << "Please, enter file path:" << endl;
+	cin.ignore(1);
+	cin.getline(path, 30);
+	FileReader::Instance().SetFilePath(path);
+	FileReader::Instance().DoReadFile();
 }
 
 void PrintMenu() {
@@ -131,9 +111,6 @@ int main() {
 		return -1;
 	}
 
-	Threadpool<SortRange>::Instance().Initialize(user_threads);
-	Threadpool<SortRange>::Instance().BeginProcessing();
-	InitializeOfnStructure();
 	PrintMenu();
 
 	while (true) {
